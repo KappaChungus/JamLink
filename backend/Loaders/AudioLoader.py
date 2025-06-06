@@ -8,22 +8,30 @@ class AudioLoader:
         self.ffmpeg_location = imageio_ffmpeg.get_ffmpeg_exe()
         os.makedirs(self.output_dir, exist_ok=True)
 
-    def download_mp3(self,url: str) -> str:
+    @staticmethod
+    def _url_to_filename(url: str) -> str:
+        safe = url.replace("://", "_").replace("/", "_").replace("?", "_").replace("&", "_").replace("=", "_")
+        return safe + ".mp3"
+
+    def get_title(self, url: str) -> str:
+        with YoutubeDL({'quiet': True}) as ydl:
+            info = ydl.extract_info(url, download=False)
+            return info['title']
+
+    def download(self, url: str):
+        output_path = os.path.join(self.output_dir, self._url_to_filename(url))
         ydl_opts = {
             'format': 'bestaudio/best',
-            'outtmpl': os.path.join(self.output_dir, '%(title)s.%(ext)s'),
+            'outtmpl': output_path.replace(".mp3", ".%(ext)s"),
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
                 'preferredquality': '192',
             }],
-            'quiet': False,
+            'quiet': True,
         }
         if self.ffmpeg_location:
             ydl_opts['ffmpeg_location'] = self.ffmpeg_location
 
         with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            filename = ydl.prepare_filename(info)
-            mp3_file = os.path.splitext(filename)[0] + ".mp3"
-            return mp3_file
+            ydl.download([url])

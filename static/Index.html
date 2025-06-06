@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8" />
+    <title>Lista Piosenek</title>
+</head>
+<body>
+    <h1>Lista Piosenek</h1>
+    <ul id="songs-list"></ul>
+
+    <button id="add-song-btn">Add Song</button>
+
+    <script>
+        async function loadSongs() {
+            try {
+                const response = await fetch('/get-audio-list');
+                if (!response.ok) throw new Error(`Błąd sieci: ${response.status}`);
+                const data = await response.json();
+                const list = document.getElementById('songs-list');
+                list.innerHTML = '';
+                data.songs.forEach(song => {
+                    const li = document.createElement('li');
+                    li.textContent = song;
+                    list.appendChild(li);
+                });
+            } catch (error) {
+                alert('Wystąpił błąd: ' + error.message);
+            }
+        }
+
+        document.getElementById('add-song-btn').addEventListener('click', () => {
+            const url = prompt('Podaj URL piosenki:');
+            if (url) {
+                fetch('/download', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({url})
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Piosenka dodana!');
+                        loadSongs(); // odśwież listę po dodaniu
+                    } else if (data.error) {
+                        alert('Błąd: ' + data.error);
+                    }
+                })
+                .catch(err => alert('Błąd sieci: ' + err.message));
+            }
+        });
+
+        // Załaduj listę od razu
+        loadSongs();
+
+        // Odświeżaj listę co 5 sekund
+        setInterval(loadSongs, 5000);
+    </script>
+</body>
+</html>
