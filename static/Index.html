@@ -1,59 +1,175 @@
 <!DOCTYPE html>
-<html lang="pl">
+<html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <title>Lista Piosenek</title>
+    <meta charset="UTF-8"/>
+    <title>Song List</title>
+    <link rel="stylesheet" href="static/index.css"/>
 </head>
 <body>
-    <h1>Lista Piosenek</h1>
-    <ul id="songs-list"></ul>
+<h1>Song List</h1>
 
-    <button id="add-song-btn">Add Song</button>
+<audio id="audio-player" controls style="width: 100%; margin-bottom: 20px;"></audio>
 
-    <script>
-        async function loadSongs() {
-            try {
-                const response = await fetch('/get-audio-list');
-                if (!response.ok) throw new Error(`Błąd sieci: ${response.status}`);
-                const data = await response.json();
-                const list = document.getElementById('songs-list');
-                list.innerHTML = '';
-                data.songs.forEach(song => {
-                    const li = document.createElement('li');
-                    li.textContent = song;
-                    list.appendChild(li);
+<ul id="songs-list"></ul>
+
+<button id="add-song-btn">Add Song</button>
+
+<script>
+    let songsData = [];  // Store full data including filename
+
+    async function loadSongs() {
+        try {
+            const response = await fetch('/get-audio-list');
+            if (!response.ok) throw new Error(`Network error: ${response.status}`);
+            const data = await response.json();
+            songsData = data.songs;  // Save full song data
+
+            const list = document.getElementById('songs-list');
+            list.innerHTML = '';
+
+            songsData.forEach((song, index) => {
+                const li = document.createElement('li');
+                li.draggable = false;  // draggable on handle only
+                li.dataset.index = index;
+
+                const title = song.title || song[0];
+                const thumbnail = song.thumbnail || song[1];
+
+                // Drag handle element
+                const dragHandle = document.createElement('span');
+                dragHandle.textContent = '☰'; // Unicode hamburger icon
+                dragHandle.style.cursor = 'grab';
+                dragHandle.style.marginRight = '10px';
+                dragHandle.draggable = true; // Only handle is draggable
+
+                dragHandle.addEventListener('dragstart', (e) => {
+                    e.dataTransfer.setData('text/plain', li.dataset.index);
+                    e.dataTransfer.effectAllowed = 'move';
+                    dragHandle.style.cursor = 'grabbing';
+                    li.classList.add('dragging');
                 });
-            } catch (error) {
-                alert('Wystąpił błąd: ' + error.message);
-            }
-        }
 
-        document.getElementById('add-song-btn').addEventListener('click', () => {
-            const url = prompt('Podaj URL piosenki:');
-            if (url) {
-                fetch('/download', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({url})
-                })
-                .then(res => res.json())
-                .then(data => {
-                    if (data.success) {
-                        alert('Piosenka dodana!');
-                        loadSongs(); // odśwież listę po dodaniu
-                    } else if (data.error) {
-                        alert('Błąd: ' + data.error);
+                dragHandle.addEventListener('dragend', () => {
+                    dragHandle.style.cursor = 'grab';
+                    li.classList.remove('dragging');
+                });
+
+                li.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    li.classList.add('drag-over');
+                });
+
+                li.addEventListener('dragleave', () => {
+                    li.classList.remove('drag-over');
+                });
+
+                li.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    li.classList.remove('drag-over');
+
+                    const draggedIndex = parseInt(e.dataTransfer.getData('text/plain'), 10);
+                    const targetIndex = parseInt(li.dataset.index, 10);
+
+                    if (draggedIndex === targetIndex) return;
+
+                    const listItems = [...list.children];
+                    const draggedItem = listItems[draggedIndex];
+                    const targetItem = listItems[targetIndex];
+
+                    if (draggedIndex < targetIndex) {
+                        list.insertBefore(draggedItem, targetItem.nextSibling);
+                    } else {
+                        list.insertBefore(draggedItem, targetItem);
                     }
-                })
-                .catch(err => alert('Błąd sieci: ' + err.message));
+
+                    // Swap in songsData
+                    const temp = songsData[draggedIndex];
+                    songsData[draggedIndex] = songsData[targetIndex];
+                    songsData[targetIndex] = temp;
+
+                    [...list.children].forEach((item, idx) => {
+                        item.dataset.index = idx;
+                    });
+                });
+
+                // Thumbnail
+                const img = document.createElement('img');
+                img.src = thumbnail || '';
+                img.alt = title;
+                img.style.height = '50px';
+                img.style.marginRight = '10px';
+                img.onerror = () => {
+                    img.style.display = 'none';
+                };
+
+                // Play song on click (except on drag handle)
+                li.addEventListener('click', async (e) => {
+                    if (e.target === dragHandle) return;
+
+                    const currentIndex = parseInt(li.dataset.index, 10);
+                    const song = songsData[currentIndex];
+                    const audioPlayer = document.getElementById('audio-player');
+
+                    try {
+                        const res = await fetch(`/download-status?url=${encodeURIComponent(song.url)}`);
+                        const statusData = await res.json();
+                        const status = statusData.status;
+
+                        if (status === 'Done') {
+                            audioPlayer.src = `/static/downloads/${song.filename}`;
+                        } else {
+                            audioPlayer.src = `/audio/${song.filename}`;
+                        }
+
+                        audioPlayer.play();
+                    } catch (err) {
+                        alert('Could not check song status: ' + err.message);
+                    }
+                });
+
+
+                li.appendChild(dragHandle);
+                li.appendChild(img);
+                li.appendChild(document.createTextNode(title));
+                list.appendChild(li);
+            });
+        } catch (error) {
+            alert('An error occurred: ' + error.message);
+        }
+    }
+
+    document.getElementById('add-song-btn').addEventListener('click', async () => {
+        const url = prompt('Enter the song URL:');
+        if (!url) return;
+
+        const songList = document.getElementById('songs-list');
+        const loadingItem = document.createElement('li');
+        loadingItem.textContent = 'Loading song title...';
+        songList.appendChild(loadingItem);
+
+        await new Promise(requestAnimationFrame);
+
+        try {
+            const res = await fetch('/download', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({url})
+            });
+
+            const data = await res.json();
+            if (data.success) {
+                loadSongs();
+            } else if (data.error) {
+                alert('Error: ' + data.error);
             }
-        });
+        } catch (err) {
+            alert('Network error: ' + err.message);
+        }
+    });
 
-        // Załaduj listę od razu
-        loadSongs();
-
-        // Odświeżaj listę co 5 sekund
-        setInterval(loadSongs, 5000);
-    </script>
+    // Load the song list on page load
+    loadSongs();
+</script>
 </body>
 </html>
