@@ -11,13 +11,13 @@ def test_get_title_real_url():
     url = "https://www.youtube.com/watch?v=g2_fdjpBgMI"
 
     start = time.time()
-    title,thumbnail = loader.get_title_and_icon(url)
+    res = loader.get_data(url)
     duration = time.time() - start
 
-    print(f"get_title took {duration:.2f} seconds, title: {title}")
-    assert isinstance(title, str)
-    assert isinstance(thumbnail, str)
-    assert len(title) > 0
+    print(f"get_title took {duration:.2f} seconds")
+    assert isinstance(res.get("title"), str)
+    assert isinstance(res.get("thumbnail"), str)
+    assert isinstance(res.get("filename"), str)
 
 
 @pytest.mark.slow
