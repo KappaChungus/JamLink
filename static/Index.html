@@ -115,12 +115,9 @@
                         const res = await fetch(`/download-status?url=${encodeURIComponent(song.url)}`);
                         const statusData = await res.json();
                         const status = statusData.status;
+                        if(status === 'Error') throw new Error(statusData.error)
 
-                        if (status === 'Done') {
-                            audioPlayer.src = `/static/downloads/${song.filename}`;
-                        } else {
-                            audioPlayer.src = `/audio/${song.filename}`;
-                        }
+                        audioPlayer.src = `/audio/${song.filename}`;
 
                         audioPlayer.play();
                     } catch (err) {
