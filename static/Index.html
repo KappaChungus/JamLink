@@ -12,7 +12,16 @@
 
 <ul id="songs-list"></ul>
 
-<button id="add-song-btn">Add Song</button>
+<div style="margin-bottom: 20px;">
+    <input type="text" id="url-input" placeholder="Paste direct URL (YouTube/SoundCloud)" style="width: 70%;">
+    <button id="add-song-btn">Add by URL</button>
+</div>
+
+<div>
+    <input type="text" id="search-input" placeholder="Search for a song by title/artist" style="width: 70%;">
+    <button id="search-btn">Search</button>
+    <ul id="search-results"></ul>
+</div>
 
 <script>
     let songsData = [];  // Store full data including filename
@@ -115,7 +124,7 @@
                         const res = await fetch(`/download-status?url=${encodeURIComponent(song.url)}`);
                         const statusData = await res.json();
                         const status = statusData.status;
-                        if(status === 'Error') throw new Error(statusData.error)
+                        if (status === 'Error') throw new Error(statusData.error)
 
                         audioPlayer.src = `/audio/${song.filename}`;
 
@@ -137,12 +146,95 @@
     }
 
     document.getElementById('add-song-btn').addEventListener('click', async () => {
-        const url = prompt('Enter the song URL:');
-        if (!url) return;
+        const url = document.getElementById('url-input').value.trim();
+        if (!url) return alert('Please enter a URL.');
 
         const songList = document.getElementById('songs-list');
         const loadingItem = document.createElement('li');
-        loadingItem.textContent = 'Loading song title...';
+        loadingItem.textContent = 'Loading song...';
+        songList.appendChild(loadingItem);
+
+        try {
+            const res = await fetch('/download', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({url})
+            });
+
+            const data = await res.json();
+            if (data.success) {
+                await loadSongs();
+            } else if (data.error) {
+                alert('Error: ' + data.error);
+            }
+        } catch (err) {
+            alert('Network error: ' + err.message);
+        }
+        loadingItem.remove();
+    });
+
+    document.getElementById('search-btn').addEventListener('click', async () => {
+        const query = document.getElementById('search-input').value.trim();
+        if (!query) return alert('Please enter a search query.');
+
+        const resultsList = document.getElementById('search-results');
+        resultsList.innerHTML = '<li>Searching...</li>';
+
+        try {
+            const res = await fetch(`/search-song?query=${encodeURIComponent(query)}`);
+            const data = await res.json();
+
+            console.log("Response data:", data);
+alert("Got " + (data.results?.length || 0) + " results");
+
+            resultsList.innerHTML = '';
+
+            if (data.results && data.results.length > 0) {
+                data.results.forEach(result => {
+                    const li = document.createElement('li');
+                    let icon = '';
+                    if (result.source === 'YouTube') icon = '📺';
+                    else if (result.source === 'SoundCloud') icon = '🎵';
+
+                    li.innerHTML = `${icon} <strong>${result.title}</strong>
+            <span style="font-size: 0.85em; color: gray;">[${result.source}]</span>`;
+                    li.style.cursor = 'pointer';
+
+                    li.addEventListener('click', async () => {
+                        const confirmDownload = confirm(`Download "${result.title}" from ${result.source}?`);
+                        if (!confirmDownload) return;
+
+                        const res = await fetch('/download', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({url: result.url})
+                        });
+
+                        const json = await res.json();
+                        if (json.success) {
+                            await loadSongs();
+                        } else {
+                            alert('Error: ' + json.error);
+                        }
+                    });
+
+                    resultsList.appendChild(li);
+                });
+            } else {
+                resultsList.innerHTML = '<li>No results found.</li>';
+            }
+        } catch
+            (err) {
+            resultsList.innerHTML = '<li>Error occurred: ' + err.message + '</li>';
+        }
+    })
+    ;
+
+
+    async function addSongFromUrl(url) {
+        const songList = document.getElementById('songs-list');
+        const loadingItem = document.createElement('li');
+        loadingItem.textContent = 'Ładowanie piosenki...';
         songList.appendChild(loadingItem);
 
         await new Promise(requestAnimationFrame);
@@ -158,12 +250,15 @@
             if (data.success) {
                 loadSongs();
             } else if (data.error) {
-                alert('Error: ' + data.error);
+                alert('Błąd: ' + data.error);
             }
         } catch (err) {
-            alert('Network error: ' + err.message);
+            alert('Błąd sieci: ' + err.message);
+        } finally {
+            songList.removeChild(loadingItem);
         }
-    });
+    }
+
 
     // Load the song list on page load
     loadSongs();
